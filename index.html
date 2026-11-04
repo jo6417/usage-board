@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>AI 사용량 대시보드</title>
+<style>
+:root { --bg: #f4f6f7; --panel: #fff; --ink: #15201f; --ink-3: #8a9796; --line: #dde3e2; --accent: #0f6e63; --accent-ink: #fff; --bad: #d64545; }
+@media (prefers-color-scheme: dark) { :root { --bg: #111716; --panel: #182120; --ink: #e8efee; --ink-3: #7c8b89; --line: #2a3533; --accent: #3fb8a6; --accent-ink: #062621; --bad: #ec6b6b; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; }
+.box { max-width: 420px; margin: 18vh auto 0; padding: 20px 16px; display: grid; gap: 10px; }
+h1 { font-size: 20px; margin: 0; }
+p { margin: 0; color: var(--ink-3); font-size: 13px; }
+form { display: flex; gap: 8px; }
+input { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+button { font: inherit; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+.err { color: var(--bad); }
+[hidden] { display: none !important; }
+</style></head><body>
+<div class="box" id="lock">
+  <h1>AI 사용량 대시보드</h1>
+  <p id="msg">여는 중입니다...</p>
+  <form id="f" hidden><input id="k" placeholder="열쇠" autocomplete="off"><button>열기</button></form>
+  <p>열쇠가 붙은 즐겨찾기 주소(#k= 로 끝나는 주소)로 열면 바로 보입니다.</p>
+</div>
+<script>
+(() => {
+  const unb = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  async function fetchPayload(key) {
+    const r = await fetch("payload.json?t=" + Date.now(), { cache: "no-store" });
+    const p = await r.json();
+    const ck = await crypto.subtle.importKey("raw", unb(key), "AES-GCM", false, ["decrypt"]);
+    const gz = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb(p.iv) }, ck, unb(p.ct));
+    const txt = await new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"))).text();
+    return JSON.parse(txt);
+  }
+  async function open(key) {
+    const p = await fetchPayload(key);
+    try { localStorage.setItem("ub-key", key); } catch (e) {}
+    window.__UB = { v: p.v, data: p.data, fetchPayload: () => fetchPayload(key) };
+    document.open(); document.write(p.html); document.close();
+  }
+  const m = location.hash.match(/k=([A-Za-z0-9_-]+)/);
+  let saved = null; try { saved = localStorage.getItem("ub-key"); } catch (e) {}
+  const msg = document.getElementById("msg"), f = document.getElementById("f");
+  function ask(text) { msg.textContent = text; msg.className = "err"; f.hidden = false; }
+  f.addEventListener("submit", (e) => { e.preventDefault(); const k = document.getElementById("k").value.trim(); if (k) open(k).catch(() => ask("열쇠가 맞지 않습니다.")); });
+  const key = (m && m[1]) || saved;
+  if (key) open(key).catch(() => ask("열쇠가 맞지 않거나 페이지를 읽지 못했습니다."));
+  else ask("열쇠가 필요합니다.");
+})();
+</script>
+</body></html>
